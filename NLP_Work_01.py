@@ -53,7 +53,7 @@ def response_conversion(row):
 y_all = raw_data.apply(lambda row: response_conversion(row), axis = 1) # the response variable
 
 #plot distribution of response variable
-labels = ['Positive','Neutral','Negative']
+'''labels = ['Positive','Neutral','Negative']
 sizes = y_all.value_counts().tolist()
 explode = (0.1, 0, 0)
 
@@ -61,6 +61,7 @@ fig1, ax1 = plt.subplots()
 ax1.pie(sizes, explode=explode, labels=labels, autopct='%1.1f%%',
         shadow=True, startangle=90)
 ax1.axis('equal')
+'''
 
 #Step 1: Descriptive analysis and test a couple of models
 
@@ -95,7 +96,7 @@ X_all_2_feature_names = vtf.get_feature_names()
 #len(X_all_2_feature_names)
 
 
-#Step 2 split data set for training and testing
+#Step 2 split data set for training and testing, and test some models before doing grid search for final models
 udv_test_size = 0.2          # update when necessary
 udv_random_state = 567      # update when necessary
 
@@ -152,10 +153,11 @@ var_imp_out2 = xgb2_variable_importance.sort_values(by = ['Variable Importance']
 #var_imp_out1.to_excel('var_imp_out3_ngrams.xlsx', sheet_name= 'out1')
 #var_imp_out2.to_excel('var_imp_out3_ngrams.xlsx', sheet_name= 'out2')
 
-#End of test water
+#######End of test water
 
 
-# cross-validation work to get better model outcome, final outcomes are generated as below
+
+# Step 3 cross-validation work to get better model outcome, final outcomes are generated as below
 #option 1
 udv_x_train =X_train
 udv_x_test =X_test
@@ -172,6 +174,8 @@ udv_y_test = y_test_2
 udv_X_feature_names = X_all_2_feature_names
 '''
 
+
+udv_x_train_nonsparse = pd.DataFrame(udv_x_train.toarray())
 
 custom_cv = StratifiedKFold(n_splits=5, random_state = 123)
 
@@ -198,6 +202,19 @@ print(accuracy_score(udv_y_test, LR_CV.predict(udv_x_test)))
 lr_model_coefficients_trans = pd.DataFrame(np.transpose(lr_model_coefficients), columns = ['U1_Coeff', 'U2_Coeff', 'U3_Coeff'], index = udv_X_feature_names)
 
 confusion_matrix(udv_y_test, LR_CV.predict(udv_x_test))
+
+lr_model_coefficients_trans['max_coef'] = lr_model_coefficients_trans.max(axis = 1)
+lr_model_coefficients_trans['min_coef'] = lr_model_coefficients_trans.min(axis = 1)
+lr_model_coefficients_trans['coef_range'] = lr_model_coefficients_trans['max_coef'] - lr_model_coefficients_trans['min_coef']
+
+#calculate variable importance for multinomial logistic regression
+lr_var_mean= udv_x_train_nonsparse.mean(axis = 0)
+lr_var_weight= np.multiply(lr_var_mean, lr_model_coefficients_trans['coef_range']).values
+lr_var_weight_df = pd.DataFrame(lr_var_weight, columns = ['Variable Importance'], index= udv_X_feature_names)
+lr_var_weight_df = lr_var_weight_df.sort_values(by = ['Variable Importance'],ascending=False)
+lr_var_weight_df.to_excel('variable_importance_final_lr.xlsx', sheet_name= 'multinomial_logistic_regression')
+
+#estimate variable importance
 
 #calculate variable importance score
 
@@ -227,10 +244,6 @@ realize_svc_model.fit(udv_x_train, udv_y_train)
 
 confusion_matrix(udv_y_test, svm_cv.predict(udv_x_test))
 
-'''
-import scipy.sparse
-pd.DataFrame.sparse.from_spmatrix(realize_svc_model.coef_)
-'''
 
 # Model 3 XGBoost
 xgb_model = xgb.XGBClassifier(booster ='gbtree', objective='multi:softmax', num_class = 3)
@@ -262,5 +275,5 @@ xgb_best_model.fit(udv_x_train, udv_y_train)
 
 xgb_var_imp= pd.DataFrame(xgb_best_model.feature_importances_, columns = ['Variable Importance'], index= udv_X_feature_names)
 xgb_var_imp = xgb_var_imp.sort_values(by = ['Variable Importance'],ascending=False)  # this is the output for reference
-
+xgb_var_imp.to_excel('variable_importance_final_xgboost.xlsx', sheet_name= 'xgboost model')
 confusion_matrix(udv_y_test, xgb_cv.predict(udv_x_test))
